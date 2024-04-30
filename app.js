@@ -19,22 +19,25 @@ const _divAlt = "CO";
 let _shooterName = "Wang, Ken";
 
 program
-  .version('1.0.0', '-v, --version')
-  .usage('[OPTIONS]...')
-  .option('-name, --shooter_name <value>', 'The name of the shooter.')
-  .option('-id, --match_id <value>', 'The match id to look for.', 'Default')
-  .parse(process.argv);
+    .version('1.0.0', '-v, --version')
+    .usage('[OPTIONS]...')
+    .option('-name, --shooter_name <value>', 'The name of the shooter.')
+    .option('-id, --match_id <value>', 'The match id to look for.', 'Default')
+    .parse(process.argv);
 
 const options = program.opts();
 _shooterName = options.shooter_name;
 _matchId = options.match_id;
 
+const _headers = { headers: { "Referer": "https://practiscore.com/" } };
+
 const [response, scoresResponse, defResponse] = await Promise.all([
-    fetch(`https://s3.amazonaws.com/ps-scores/production/${_matchId}/results.json`),
-    fetch(`https://s3.amazonaws.com/ps-scores/production/${_matchId}/match_scores.json`),
-    fetch(`https://s3.amazonaws.com/ps-scores/production/${_matchId}/match_def.json`)
+    fetch(`https://s3.amazonaws.com/ps-scores/production/${_matchId}/results.json`, _headers),
+    fetch(`https://s3.amazonaws.com/ps-scores/production/${_matchId}/match_scores.json`, _headers),
+    fetch(`https://s3.amazonaws.com/ps-scores/production/${_matchId}/match_def.json`, _headers)
 ]);
-const [results, scores, def] = await Promise.all([response.json(), scoresResponse.json(), defResponse.json()]);
+
+const [results, scores, def] = await Promise.all([parseJson(response), parseJson(scoresResponse), parseJson(defResponse)]);
 console.log(def.match_name);
 // console.log(JSON.stringify(results));
 
@@ -101,6 +104,13 @@ for (const stage of scores.match_scores) {
     scoreMap[stage.stage_uuid] = shooterMap;
 }
 
+async function parseJson(response) {
+    if (!response.ok) {
+        throw new Error("Request failed: " + response.status + "\n" + await response.text())
+    }
+    return response.json();
+}
+
 function scoreToString(score) {
     let a = score.poph || 0;
     let c = 0;
@@ -160,13 +170,13 @@ const stages = results.forEach((stage) => {
     const score = shooter && scoreToString(scoreMap[stageId][shooter.shooter]);
     const classifierInfo = stageDef && stageDef.stage_classifiercode && `(CM ${stageDef.stage_classifiercode})` || "";
     const text = shooter ?
-`
-${name} ${classifierInfo}
+        `
+${name.replace(/Stage[0-9]+\/Bay[0-9]+\ */, "")} ${classifierInfo}
 ${shooter.place}/${shooterCount} ${shooter.stagePercent}%
 ${score}
 Time ${shooter.stageTimeSecs}s
 HF ${shooter.hitFactor}
 ` :
-    name;
+        name;
     console.log(text);
 });
